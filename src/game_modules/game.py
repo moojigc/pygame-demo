@@ -20,9 +20,9 @@ class Game:
     def __init__(self, title: str, settings: Settings) -> None:
         self.screen = Screen(settings)
         self.title = title
-        self.ship = Ship(self.screen.surface)
+        self.ship = Ship(self.screen.surface, settings)
         self.event_watcher = EventWatcher(
-            callbacks=[self.ship.movement.event_listener])
+            callbacks=[self.ship.event_listener])
         self.__init_pygame()
 
     def run(self):
@@ -34,8 +34,7 @@ class Game:
     def loop(self):
         # keyboard listener
         self.event_watcher.watch_pygame_events()
-        self.ship.blit_me()
-        self.ship.movement.update()
+        self.ship.loop()
         display.flip()
 
     def __init_pygame(self):

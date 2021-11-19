@@ -1,100 +1,85 @@
+from typing import Literal, Tuple
 from pygame import Rect, Surface, image, constants
 from pygame.event import Event
 
-
-class Direction:
-    def __init__(self, rect: Rect, screen_rect: Rect, axis: str, amount: int) -> None:
-        self.rect = rect
-        self.screen_rect = screen_rect
-        self.amount = amount
-        self.axis = axis
-
-    def add(self):
-        # if not self.check_screen():
-        #     return
-        if self.axis == 'x':
-            self.rect.centerx += self.amount
-        elif self.axis == 'y':
-            self.rect.bottom += self.amount
-
-    def check_screen(self):
-        ok = True
-        for check in [
-            self.rect.left >= self.screen_rect.left,
-            self.rect.right <= self.screen_rect.right,
-            self.rect.bottom >= self.screen_rect.bottom,
-            self.rect.top <= self.screen_rect.top
-        ]:
-            ok = check
-        return ok
-
-
-class ShipMovement:
-    """handle ship movement"""
-
-    def __init__(self, self_rect: Rect, screen_rect: Rect, x=0, y=0) -> None:
-        self.rect = self_rect
-        self.x = Direction(self.rect, screen_rect, 'x', x)
-        self.y = Direction(self.rect, screen_rect, 'y', y)
-
-        self.speed_multiplier = 1
-
-        self.movement_dict = dict([
-            (constants.K_UP, (self.y, -1)),
-            (constants.K_DOWN, (self.y, 1)),
-            (constants.K_LEFT, (self.x, -1)),
-            (constants.K_RIGHT, (self.x, 1)),
-        ])
-
-    def event_listener(self, event: Event):
-        """Listen to a pygame Event"""
-        if event.type not in [constants.KEYUP, constants.KEYDOWN]:
-            return
-        if not event.key:
-            return
-        self.handle_shift(event)
-        if not event.key in self.movement_dict:
-            return
-        direction, amount = self.movement_dict.get(event.key)
-
-        if not direction:
-            return
-        if event.type == constants.KEYDOWN:
-            direction.amount = amount * self.speed_multiplier
-        elif event.type == constants.KEYUP:
-            direction.amount = 0
-
-    def handle_shift(self, event):
-        print(event.key, constants.K_LSHIFT)
-        if event.key == constants.K_LSHIFT:
-            print("hit shift")
-            if event.type == constants.KEYDOWN:
-                self.set_speed_multiplier(4)
-            else:
-                self.set_speed_multiplier(1)
-
-    def set_speed_multiplier(self, amount: int):
-        self.speed_multiplier = amount
-
-    def update(self):
-        for direction in [self.x, self.y]:
-            direction.add()
+from utils.settings import Settings
 
 
 class Ship:
-    def __init__(self, screen: Surface) -> None:
+    def __init__(self, screen: Surface, game_settings: Settings) -> None:
         self.screen = screen
         self.image = image.load('src/images/ship.bmp')
+        self.game_settings = game_settings
 
         self.rect = self.image.get_rect()
         self.screen_rect = screen.get_rect()
-
-        self.movement = ShipMovement(self.rect, self.screen_rect)
 
         # start ship at bottom of screen
         self.rect.centerx = self.screen_rect.centerx
         self.rect.bottom = self.screen_rect.bottom - 10
 
-    def blit_me(self):
+        self.moving_x = 0
+        self.moving_y = 0
+
+        # store as float
+        self.centerx = float(self.rect.centerx)
+        self.bottom = float(self.rect.bottom)
+
+        self.speed_multiplier = 1
+
+        # What key corresponds to what method
+        self.movement_dict = dict([
+            (constants.K_LEFT, lambda e: self.__set_direction_x(e, -1)),
+            (constants.K_RIGHT, lambda e: self.__set_direction_x(e, 1)),
+            (constants.K_UP, lambda e: self.__set_direction_y(e, -1)),
+            (constants.K_DOWN, lambda e: self.__set_direction_y(e, 1)),
+            (constants.K_LSHIFT, lambda e: self.__update_speed(e)),
+            (constants.K_RSHIFT, lambda e: self.__update_speed(e))
+        ])
+
+        self.direction_dict = dict([
+            (constants.KEYDOWN, 1),
+            (constants.KEYUP, 0)
+        ])
+
+    def event_listener(self, event: Event):
+        try:
+            fn = self.movement_dict.get(event.key)
+            if fn:
+                fn(event)
+        except AttributeError:
+            pass
+
+    def loop(self):
         """Draw ship at current location"""
         self.screen.blit(self.image, self.rect)
+        self.__move()
+
+    def __set_direction_x(self, event: Event, flag: Literal[-1, 0, 1]):
+        self.moving_x = self.direction_dict.get(event.type) * flag
+
+    def __set_direction_y(self, event: Event, flag: Literal[-1, 0, 1]):
+        self.moving_y = self.direction_dict.get(event.type) * flag
+
+    def __move(self):
+        self.centerx += self.moving_x * self.__get_speed('x')
+        self.rect.centerx = self.centerx
+        self.bottom += self.moving_y * self.__get_speed('y')
+        self.rect.bottom = self.bottom
+
+    def __get_speed(self, dir):
+        if not self.__check_screen()[dir]:
+            return 0
+        return self.game_settings.ship_speed * self.speed_multiplier
+
+    def __check_screen(self):
+        return {
+            'x': self.rect.centerx >= self.screen_rect.x - 1,
+            'y': self.rect.bottom >= self.screen_rect.y - 1
+        }
+
+    def __update_speed(self, e: Event):
+        if e.type == constants.KEYDOWN:
+            self.speed_multiplier = 4
+        elif e.type == constants.KEYUP:
+            self.speed_multiplier = 1
